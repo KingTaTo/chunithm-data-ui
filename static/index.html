@@ -1,0 +1,45 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CHUNITHM Data UI</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>CHUNITHM Data UI</h1>
+      <p id="game-root">Loading catalog...</p>
+    </div>
+    <button id="rescan" type="button">Rescan</button>
+  </header>
+
+  <main>
+    <section class="stats" id="stats"></section>
+
+    <section class="toolbar">
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-category="music" type="button">Music</button>
+        <button class="tab" data-category="characters" type="button">Characters</button>
+        <button class="tab" data-category="nameplates" type="button">Name Plates</button>
+      </div>
+      <label class="search">
+        <span>Search</span>
+        <input id="search" type="search" placeholder="Title, artist, pack, file...">
+      </label>
+    </section>
+
+    <section class="content">
+      <div class="table-wrap">
+        <table>
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
