@@ -6,12 +6,16 @@
 
 // Column definitions stay paired with the backend category names.
 const columns = {
-  music: ["ID", "Title", "Artist", "Genre", "Charts", "Pack", "Source"],
-  characters: ["ID", "Name", "Works", "Image Key", "Pack", "Source"],
-  nameplates: ["ID", "Name", "Image", "Pack", "Source"],
+  music: ["Jacket", "ID", "Title", "Artist", "Category", "Charts"],
+  characters: ["ID", "Name", "Works", "Image Key"],
+  nameplates: ["ID", "Name", "Image"],
 };
 
 const el = (id) => document.getElementById(id);
+
+function categoryLabel() {
+  return document.querySelector(`.tab[data-category="${state.category}"]`)?.textContent || state.category;
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -52,13 +56,27 @@ function renderHead() {
 }
 
 // Render only the current page of API results to keep large catalogs responsive.
+function renderResultCount(total, shown) {
+  const label = categoryLabel().toLowerCase();
+  const noun = total === 1 ? label.replace(/s$/, "") : label;
+  const suffix = shown < total ? `, showing first ${shown}` : "";
+  el("results-count").textContent = `${total.toLocaleString()} ${noun}${suffix}`;
+}
+
 function renderRows(items) {
   const body = el("table-body");
   if (!items.length) {
-    body.innerHTML = `<tr><td colspan="7" class="muted">No matching entries.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="6" class="muted">No matching entries.</td></tr>`;
     return;
   }
   body.innerHTML = items.map((item) => renderRow(item)).join("");
+}
+
+function renderJacket(item) {
+  if (!item.jacketUrl) {
+    return `<div class="jacket-placeholder">No jacket</div>`;
+  }
+  return `<img class="jacket" src="${escapeHtml(item.jacketUrl)}" alt="${escapeHtml(item.name || item.dataName)} jacket" loading="lazy">`;
 }
 
 function renderRow(item) {
@@ -67,32 +85,27 @@ function renderRow(item) {
       <span class="badge ${chartClass(chart.type)}">${escapeHtml(chart.type)} ${escapeHtml(chart.level)}</span>
     `).join("");
     return `<tr>
+      <td>${renderJacket(item)}</td>
       <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong><br><small>${escapeHtml(item.dataName)}</small></td>
+      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
       <td>${escapeHtml(item.artist)}</td>
       <td>${escapeHtml(item.genre)}</td>
       <td>${charts || "<small>None</small>"}</td>
-      <td>${escapeHtml(item.pack)}</td>
-      <td><small>${escapeHtml(item.source)}</small></td>
     </tr>`;
   }
   if (state.category === "characters") {
     return `<tr>
       <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong><br><small>${escapeHtml(item.dataName)}</small></td>
+      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
       <td>${escapeHtml(item.works)}</td>
       <td>${escapeHtml(item.imageKey)}</td>
-      <td>${escapeHtml(item.pack)}</td>
-      <td><small>${escapeHtml(item.source)}</small></td>
     </tr>`;
   }
   if (state.category === "nameplates") {
     return `<tr>
       <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong><br><small>${escapeHtml(item.dataName)}</small></td>
+      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
       <td>${escapeHtml(item.image)}</td>
-      <td>${escapeHtml(item.pack)}</td>
-      <td><small>${escapeHtml(item.source)}</small></td>
     </tr>`;
   }
   return "";
@@ -102,10 +115,11 @@ let searchTimer = null;
 // Each tab asks the backend for its category, preserving the active search text.
 async function loadCategory() {
   renderHead();
-  el("table-body").innerHTML = `<tr><td colspan="7" class="muted">Loading...</td></tr>`;
+  el("table-body").innerHTML = `<tr><td colspan="6" class="muted">Loading...</td></tr>`;
   const params = new URLSearchParams({ limit: "400" });
   if (state.query) params.set("q", state.query);
   const data = await fetchJson(`/api/${state.category}?${params.toString()}`);
+  renderResultCount(data.total, data.items.length);
   renderRows(data.items);
 }
 
@@ -147,5 +161,12 @@ boot().catch((error) => {
   el("game-root").textContent = error.message;
   el("table-body").innerHTML = `<tr><td class="muted">${escapeHtml(error.message)}</td></tr>`;
 });
+
+
+
+
+
+
+
 
 
