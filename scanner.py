@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 from config import MAX_ITEMS_PER_CATEGORY, TAG_PATTERNS
 from models import Catalog
 
+MusicItem = dict[str, Any]
+
 
 def clean_text(value: str | None) -> str:
     if value is None:
@@ -71,46 +73,53 @@ def fallback_field(path: Path, tag: str) -> str:
     return clean_text(match.group(1) if match else "")
 
 
+def pack_name(path: Path, root_dir: Path) -> str:
+    rel = path.relative_to(root_dir).parts
+    if len(rel) >= 3 and rel[0].lower() == "bin" and rel[1].lower() == "option":
+        return rel[2]
+    if len(rel) >= 2 and rel[0].lower() in {"data", "option"}:
+        return rel[1] if rel[0].lower() == "option" else "base"
+    return "base"
+
+
+def parse_chart(chart: ET.Element) -> dict[str, str]:
+    level = child_int(chart, "level")
+    decimal = child_int(chart, "levelDecimal")
+    level_text = str(level) if decimal == 0 else f"{level}.{str(decimal).rstrip('0')}"
+    return {
+        "type": child_text(chart, "type/data") or child_text(chart, "type/str"),
+        "level": level_text,
+        "file": child_text(chart, "file/path"),
+        "designer": child_text(chart, "notesDesigner"),
+    }
+
+
 # Music entries include chart levels, jacket filenames, pack names, and source paths.
-def parse_music(path: Path, root_dir: Path) -> dict[str, Any]:
+def parse_music(path: Path, root_dir: Path) -> MusicItem:
     root = parse_xml(path)
-    jacket = child_text(root, "jaketFile/path") if root is not None else fallback_field(path, "path")
-    item = {
+    jacket = child_text(root, "jaketFile/path") if root is not None else ""
+    source = relpath(path, root_dir)
+    item: MusicItem = {
         "dataName": child_text(root, "dataName") if root is not None else fallback_field(path, "dataName"),
         "id": child_int(root, "name/id") if root is not None else 0,
         "name": child_text(root, "name/str") if root is not None else "",
         "artist": child_text(root, "artistName/str") if root is not None else "",
         "genre": "",
         "jacket": jacket,
-        "jacketUrl": "",
+        "jacketUrl": f"/api/jacket?source={quote(source)}" if jacket else "",
         "enabled": not child_bool(root, "disableFlag") if root is not None else True,
         "enableUltima": child_bool(root, "enableUltima") if root is not None else False,
-        "source": relpath(path, root_dir),
+        "source": source,
         "pack": pack_name(path, root_dir),
         "charts": [],
     }
-    if item["jacket"]:
-        item["jacketUrl"] = f"/api/jacket?source={quote(item['source'])}"
     if root is None:
         item["name"] = item["dataName"] or path.parent.name
         return item
 
     genre = root.find("genreNames/list/StringID/str")
     item["genre"] = clean_text(genre.text if genre is not None else "")
-
-    for chart in root.findall("fumens/MusicFumenData"):
-        enabled = child_bool(chart, "enable")
-        if not enabled:
-            continue
-        level = child_int(chart, "level")
-        decimal = child_int(chart, "levelDecimal")
-        level_text = str(level) if decimal == 0 else f"{level}.{str(decimal).rstrip('0')}"
-        item["charts"].append({
-            "type": child_text(chart, "type/data") or child_text(chart, "type/str"),
-            "level": level_text,
-            "file": child_text(chart, "file/path"),
-            "designer": child_text(chart, "notesDesigner"),
-        })
+    item["charts"] = [parse_chart(chart) for chart in root.findall("fumens/MusicFumenData") if child_bool(chart, "enable")]
     return item
 
 
@@ -141,15 +150,6 @@ def parse_nameplate(path: Path, root_dir: Path) -> dict[str, Any]:
         "source": relpath(path, root_dir),
         "pack": pack_name(path, root_dir),
     }
-
-
-def pack_name(path: Path, root_dir: Path) -> str:
-    rel = path.relative_to(root_dir).parts
-    if len(rel) >= 3 and rel[0].lower() == "bin" and rel[1].lower() == "option":
-        return rel[2]
-    if len(rel) >= 2 and rel[0].lower() in {"data", "option"}:
-        return rel[1] if rel[0].lower() == "option" else "base"
-    return "base"
 
 
 def find_jacket_path(catalog: Catalog, source: str) -> Path | None:
@@ -216,19 +216,54 @@ def scan_category(root_dir: Path, file_name: str, parser) -> list[dict[str, Any]
     return items
 
 
+def music_dedupe_rank(item: MusicItem) -> tuple[int, int, str]:
+    source = str(item.get("source", "")).replace("\\", "/").casefold()
+    pack = str(item.get("pack", "")).casefold()
+    if source.startswith("bin/option/"):
+        location_rank = 0
+    elif source.startswith("data/"):
+        location_rank = 1
+    else:
+        location_rank = 2
+    pack_rank = 1 if pack == "azen" else 0
+    return (location_rank, pack_rank, source)
+
+
+def music_dedupe_key(item: MusicItem) -> tuple[str, int | str]:
+    music_id = int(item.get("id") or 0)
+    if music_id >= 0:
+        return ("id", music_id)
+    data_name = str(item.get("dataName") or item.get("source") or "")
+    return ("dataName", data_name)
+
+
+def dedupe_music(items: list[MusicItem]) -> list[MusicItem]:
+    by_key: dict[tuple[str, int | str], MusicItem] = {}
+    for item in items:
+        key = music_dedupe_key(item)
+        current = by_key.get(key)
+        if current is None or music_dedupe_rank(item) < music_dedupe_rank(current):
+            by_key[key] = item
+    return sorted(by_key.values(), key=lambda item: (int(item.get("id") or 0), str(item.get("source", ""))))
+
+
 def scan_game_root(root_dir: Path) -> Catalog:
     root_dir = root_dir.resolve()
     if not root_dir.exists():
         raise FileNotFoundError(f"Game root does not exist: {root_dir}")
     catalog = Catalog(game_root=root_dir, generated_at=time.time())
     catalog.stats = scan_files(root_dir)
-    catalog.music = scan_category(root_dir, TAG_PATTERNS["music"], parse_music)
+    catalog.music = dedupe_music(scan_category(root_dir, TAG_PATTERNS["music"], parse_music))
     catalog.characters = scan_category(root_dir, TAG_PATTERNS["characters"], parse_character)
     catalog.nameplates = scan_category(root_dir, TAG_PATTERNS["nameplates"], parse_nameplate)
     for key in ["music", "characters", "nameplates"]:
         if len(getattr(catalog, key)) >= MAX_ITEMS_PER_CATEGORY:
             catalog.warnings.append(f"{key} was capped at {MAX_ITEMS_PER_CATEGORY} items")
     return catalog
+
+
+def searchable_text(item: dict[str, Any]) -> str:
+    return json.dumps(item, ensure_ascii=False, sort_keys=True).casefold()
 
 
 # Apply lightweight search and filters server-side before sending rows to the browser.
@@ -238,7 +273,7 @@ def filter_items(items: list[dict[str, Any]], query: dict[str, list[str]]) -> tu
     enabled = query.get("enabled", [""])[0].casefold()
     result = items
     if search:
-        result = [item for item in result if search in json.dumps(item, ensure_ascii=False).casefold()]
+        result = [item for item in result if search in searchable_text(item)]
     if pack:
         result = [item for item in result if item.get("pack", "").casefold() == pack]
     if enabled in {"true", "false"}:

@@ -12,6 +12,7 @@ const columns = {
 };
 
 const el = (id) => document.getElementById(id);
+const currentColumns = () => columns[state.category] || [];
 
 function categoryLabel() {
   return document.querySelector(`.tab[data-category="${state.category}"]`)?.textContent || state.category;
@@ -40,6 +41,7 @@ async function fetchJson(url) {
 function renderStats(summary) {
   state.summary = summary;
   el("game-root").textContent = summary.gameRoot;
+
   const stats = [
     [summary.counts.music, "Music entries"],
     [summary.counts.characters, "Characters"],
@@ -52,7 +54,7 @@ function renderStats(summary) {
 }
 
 function renderHead() {
-  el("table-head").innerHTML = `<tr>${columns[state.category].map((name) => `<th>${name}</th>`).join("")}</tr>`;
+  el("table-head").innerHTML = `<tr>${currentColumns().map((name) => `<th>${name}</th>`).join("")}</tr>`;
 }
 
 // Render only the current page of API results to keep large catalogs responsive.
@@ -63,13 +65,16 @@ function renderResultCount(total, shown) {
   el("results-count").textContent = `${total.toLocaleString()} ${noun}${suffix}`;
 }
 
+function renderTableMessage(message) {
+  el("table-body").innerHTML = `<tr><td colspan="${currentColumns().length}" class="muted">${escapeHtml(message)}</td></tr>`;
+}
+
 function renderRows(items) {
-  const body = el("table-body");
   if (!items.length) {
-    body.innerHTML = `<tr><td colspan="6" class="muted">No matching entries.</td></tr>`;
+    renderTableMessage("No matching entries.");
     return;
   }
-  body.innerHTML = items.map((item) => renderRow(item)).join("");
+  el("table-body").innerHTML = items.map((item) => renderRow(item)).join("");
 }
 
 function renderJacket(item) {
@@ -79,45 +84,55 @@ function renderJacket(item) {
   return `<img class="jacket" src="${escapeHtml(item.jacketUrl)}" alt="${escapeHtml(item.name || item.dataName)} jacket" loading="lazy">`;
 }
 
+function renderMusicRow(item) {
+  const charts = (item.charts || []).map((chart) => `
+    <span class="badge ${chartClass(chart.type)}">${escapeHtml(chart.type)} ${escapeHtml(chart.level)}</span>
+  `).join("");
+
+  return `<tr>
+    <td>${renderJacket(item)}</td>
+    <td>${escapeHtml(item.id)}</td>
+    <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
+    <td>${escapeHtml(item.artist)}</td>
+    <td>${escapeHtml(item.genre)}</td>
+    <td>${charts || "<small>None</small>"}</td>
+  </tr>`;
+}
+
+function renderCharacterRow(item) {
+  return `<tr>
+    <td>${escapeHtml(item.id)}</td>
+    <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
+    <td>${escapeHtml(item.works)}</td>
+    <td>${escapeHtml(item.imageKey)}</td>
+  </tr>`;
+}
+
+function renderNameplateRow(item) {
+  return `<tr>
+    <td>${escapeHtml(item.id)}</td>
+    <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
+    <td>${escapeHtml(item.image)}</td>
+  </tr>`;
+}
+
 function renderRow(item) {
-  if (state.category === "music") {
-    const charts = (item.charts || []).map((chart) => `
-      <span class="badge ${chartClass(chart.type)}">${escapeHtml(chart.type)} ${escapeHtml(chart.level)}</span>
-    `).join("");
-    return `<tr>
-      <td>${renderJacket(item)}</td>
-      <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
-      <td>${escapeHtml(item.artist)}</td>
-      <td>${escapeHtml(item.genre)}</td>
-      <td>${charts || "<small>None</small>"}</td>
-    </tr>`;
-  }
-  if (state.category === "characters") {
-    return `<tr>
-      <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
-      <td>${escapeHtml(item.works)}</td>
-      <td>${escapeHtml(item.imageKey)}</td>
-    </tr>`;
-  }
-  if (state.category === "nameplates") {
-    return `<tr>
-      <td>${escapeHtml(item.id)}</td>
-      <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
-      <td>${escapeHtml(item.image)}</td>
-    </tr>`;
-  }
+  if (state.category === "music") return renderMusicRow(item);
+  if (state.category === "characters") return renderCharacterRow(item);
+  if (state.category === "nameplates") return renderNameplateRow(item);
   return "";
 }
 
 let searchTimer = null;
+
 // Each tab asks the backend for its category, preserving the active search text.
 async function loadCategory() {
   renderHead();
-  el("table-body").innerHTML = `<tr><td colspan="6" class="muted">Loading...</td></tr>`;
+  renderTableMessage("Loading...");
+
   const params = new URLSearchParams({ limit: "400" });
   if (state.query) params.set("q", state.query);
+
   const data = await fetchJson(`/api/${state.category}?${params.toString()}`);
   renderResultCount(data.total, data.items.length);
   renderRows(data.items);
@@ -159,14 +174,6 @@ el("rescan").addEventListener("click", async () => {
 
 boot().catch((error) => {
   el("game-root").textContent = error.message;
-  el("table-body").innerHTML = `<tr><td class="muted">${escapeHtml(error.message)}</td></tr>`;
+  renderTableMessage(error.message);
 });
-
-
-
-
-
-
-
-
 

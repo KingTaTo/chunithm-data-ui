@@ -62,7 +62,7 @@ main {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -204,6 +204,4 @@ small, .muted { color: var(--muted); }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .search { min-width: 0; }
 }
-
-
 

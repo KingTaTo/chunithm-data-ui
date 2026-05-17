@@ -10,9 +10,12 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from config import STATIC_ROOT
+from models import Catalog
 from scanner import filter_items
 from selection import choose_game_root
 from store import CatalogStore
+
+API_CATEGORIES = {"music", "characters", "nameplates"}
 
 
 # Serves the static UI and read-only JSON endpoints from the selected game folder.
@@ -21,54 +24,62 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+
         if parsed.path == "/":
             self.serve_file(STATIC_ROOT / "index.html", "text/html; charset=utf-8")
             return
         if parsed.path.startswith("/static/"):
-            relative = Path(unquote(parsed.path.removeprefix("/static/")))
-            target = (STATIC_ROOT / relative).resolve()
-            if not str(target).startswith(str(STATIC_ROOT.resolve())):
-                self.send_error(HTTPStatus.FORBIDDEN)
-                return
-            self.serve_file(target)
+            self.serve_static(parsed.path)
             return
         if parsed.path == "/api/status":
             self.send_json(self.store.status())
             return
         if parsed.path == "/api/rescan":
-            catalog = self.store.scan()
-            self.send_json(catalog.as_summary())
+            self.send_json(self.store.scan().as_summary())
             return
         if parsed.path == "/api/summary":
-            catalog = self.ensure_catalog()
-            self.send_json(catalog.as_summary())
+            self.send_json(self.ensure_catalog().as_summary())
             return
         if parsed.path == "/api/jacket":
-            self.serve_jacket(parse_qs(parsed.query))
+            self.serve_jacket(query)
             return
         if parsed.path.startswith("/api/"):
-            category = parsed.path.removeprefix("/api/")
-            catalog = self.ensure_catalog()
-            if category not in {"music", "characters", "nameplates"}:
-                self.send_error(HTTPStatus.NOT_FOUND)
-                return
-            items = getattr(catalog, category)
-            filtered_items, total = filter_items(items, parse_qs(parsed.query))
-            self.send_json({"items": filtered_items, "total": total})
+            self.serve_category(parsed.path.removeprefix("/api/"), query)
             return
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def log_message(self, format: str, *args: Any) -> None:
         print(f"{self.address_string()} - {format % args}")
 
-    def ensure_catalog(self):
+    def ensure_catalog(self) -> Catalog:
         return self.store.get() or self.store.scan()
+
+    def serve_static(self, request_path: str) -> None:
+        relative = Path(unquote(request_path.removeprefix("/static/")))
+        target = (STATIC_ROOT / relative).resolve()
+        if not self.is_under_static_root(target):
+            self.send_error(HTTPStatus.FORBIDDEN)
+            return
+        self.serve_file(target)
+
+    def serve_category(self, category: str, query: dict[str, list[str]]) -> None:
+        if category not in API_CATEGORIES:
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+
+        catalog = self.ensure_catalog()
+        items = getattr(catalog, category)
+        filtered_items, total = filter_items(items, query)
+        self.send_json({"items": filtered_items, "total": total})
 
     def serve_jacket(self, query: dict[str, list[str]]) -> None:
         source = query.get("source", [""])[0]
         if not source:
             self.send_error(HTTPStatus.BAD_REQUEST, "Missing source parameter")
             return
+
         try:
             data = self.store.jacket_png(source)
         except RuntimeError as exc:
@@ -77,6 +88,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (FileNotFoundError, ValueError) as exc:
             self.send_error(HTTPStatus.NOT_FOUND, str(exc))
             return
+
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "image/png")
         self.send_header("Cache-Control", "public, max-age=3600")
@@ -88,6 +100,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not path.exists() or not path.is_file():
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+
         data = path.read_bytes()
         guessed = content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         self.send_response(HTTPStatus.OK)
@@ -104,6 +117,14 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    @staticmethod
+    def is_under_static_root(path: Path) -> bool:
+        try:
+            path.relative_to(STATIC_ROOT.resolve())
+            return True
+        except ValueError:
+            return False
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Browse CHUNITHM game data in a local web UI.")
@@ -115,8 +136,10 @@ def main() -> None:
     game_root = choose_game_root(args.game_root)
     store = CatalogStore(game_root)
     Handler.store = store
+
     print(f"Scanning {store.game_root} ...")
     store.scan()
+
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"CHUNITHM Data UI running at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")
@@ -130,5 +153,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 
