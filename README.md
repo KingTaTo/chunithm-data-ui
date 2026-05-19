@@ -44,14 +44,21 @@ You can also set `CHUNITHM_GAME_ROOT` before running the server if you do not wa
 
 - `server.py` - HTTP server, routes, and startup.
 - `selection.py` - command-line path handling and folder picker.
-- `scanner.py` - XML parsing, catalog scanning, filtering, and jacket path lookup.
+- `scanner.py` - XML parsing, catalog scanning, filtering, and jacket/character image path lookup.
 - `image_utils.py` - DDS-to-PNG conversion helpers.
-- `store.py` - in-memory catalog and jacket cache.
+- `store.py` - in-memory catalog plus jacket and character image PNG caches.
 - `models.py` - shared catalog data model.
 - `config.py` - shared constants.
 - `static/` - browser UI assets.
+
+## API
+
+- `GET /api/jacket?source=<game-relative-path>` - returns a music jacket image as `image/png`.
+- `GET /api/character-image?source=<game-relative-path>` - returns a character image as `image/png`.
+
+Both image endpoints convert `.dds` files to PNG on demand and cache the PNG bytes in memory. Running `/api/rescan` clears both image caches along with replacing the catalog.
+
 ## Notes
 
-Song jacket `.dds` textures are converted to PNG on demand with [`py_dds`](https://github.com/robertkist/py_dds). Other proprietary audio/chart formats such as `.acb`, `.awb`, and `.c2s` are cataloged as paths and metadata only.
-
+Song jacket and character `.dds` textures are converted to PNG on demand with [`py_dds`](https://github.com/robertkist/py_dds). Other proprietary audio/chart formats such as `.acb`, `.awb`, and `.c2s` are cataloged as paths and metadata only.
 
