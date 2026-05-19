@@ -31,6 +31,8 @@ Then open:
 http://127.0.0.1:8765
 ```
 
+The Characters tab renders as a card grid instead of the table used by Music and Name Plates. Clicking a character thumbnail opens a larger in-page image preview modal, and entries without a resolved character image show a placeholder card.
+
 Optional terminal-only usage:
 
 ```powershell
@@ -61,4 +63,3 @@ Both image endpoints convert `.dds` files to PNG on demand and cache the PNG byt
 ## Notes
 
 Song jacket and character `.dds` textures are converted to PNG on demand with [`py_dds`](https://github.com/robertkist/py_dds). Other proprietary audio/chart formats such as `.acb`, `.awb`, and `.c2s` are cataloged as paths and metadata only.
-
