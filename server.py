@@ -44,6 +44,9 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/jacket":
             self.serve_jacket(query)
             return
+        if parsed.path == "/api/character-image":
+            self.serve_character_image(query)
+            return
         if parsed.path.startswith("/api/"):
             self.serve_category(parsed.path.removeprefix("/api/"), query)
             return
@@ -82,6 +85,28 @@ class Handler(SimpleHTTPRequestHandler):
 
         try:
             data = self.store.jacket_png(source)
+        except RuntimeError as exc:
+            self.send_error(HTTPStatus.NOT_IMPLEMENTED, str(exc))
+            return
+        except (FileNotFoundError, ValueError) as exc:
+            self.send_error(HTTPStatus.NOT_FOUND, str(exc))
+            return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def serve_character_image(self, query: dict[str, list[str]]) -> None:
+        source = query.get("source", [""])[0]
+        if not source:
+            self.send_error(HTTPStatus.BAD_REQUEST, "Missing source parameter")
+            return
+
+        try:
+            data = self.store.character_image_png(source)
         except RuntimeError as exc:
             self.send_error(HTTPStatus.NOT_IMPLEMENTED, str(exc))
             return
@@ -153,4 +178,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
