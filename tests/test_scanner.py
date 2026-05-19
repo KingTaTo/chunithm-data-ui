@@ -77,6 +77,69 @@ class ScannerCharacterTests(unittest.TestCase):
 
             self.assertEqual(resolved, image_path.resolve())
 
+    def test_parse_character_uses_dds_manifest_backed_default_image(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "Option" / "A133" / "chara" / "chara018150" / "Chara.xml"
+            manifest_path = game_root / "Option" / "A133" / "ddsImage" / "ddsImage018150" / "DDSImage.xml"
+            image_path = manifest_path.parent / "CHU_UI_Character_1815_00_00.dds"
+            xml_path.parent.mkdir(parents=True)
+            manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>1815</id><str>Real Layout</str></name>
+                <defaultImages><str>chara1815_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara1815_00</str></name>
+                <ddsFile0><path>CHU_UI_Character_1815_00_00.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+
+            item = parse_character(xml_path, game_root)
+
+            self.assertEqual(item["image"], "")
+            self.assertEqual(item["imageKey"], "chara1815_00")
+            self.assertEqual(
+                item["imageUrl"],
+                "/api/character-image?source=Option/A133/chara/chara018150/Chara.xml",
+            )
+
+    def test_find_character_image_path_resolves_dds_manifest_relative_to_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "Option" / "A133" / "chara" / "chara018150" / "Chara.xml"
+            manifest_path = game_root / "Option" / "A133" / "ddsImage" / "ddsImage018150" / "DDSImage.xml"
+            image_path = manifest_path.parent / "CHU_UI_Character_1815_00_00.dds"
+            xml_path.parent.mkdir(parents=True)
+            manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>1815</id><str>Real Layout</str></name>
+                <defaultImages><str>chara1815_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara1815_00</str></name>
+                <ddsFile0><path>CHU_UI_Character_1815_00_00.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+            item = parse_character(xml_path, game_root)
+            catalog = Catalog(game_root=game_root, generated_at=0.0, characters=[item])
+
+            resolved = find_character_image_path(catalog, item["source"])
+
+            self.assertEqual(resolved, image_path.resolve())
+
     def test_find_character_image_path_rejects_missing_and_escaping_paths(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             game_root = Path(tmpdir)
@@ -138,6 +201,59 @@ class ScannerCharacterTests(unittest.TestCase):
             catalog = Catalog(game_root=game_root, generated_at=0.0, characters=[item])
 
             self.assertIsNone(find_character_image_path(catalog, "../escape.xml"))
+
+    def test_find_character_image_path_rejects_missing_and_escaping_manifest_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            missing_xml = game_root / "Option" / "A133" / "chara" / "chara018151" / "Chara.xml"
+            escape_xml = game_root / "Option" / "A133" / "chara" / "chara018152" / "Chara.xml"
+            missing_manifest = game_root / "Option" / "A133" / "ddsImage" / "ddsImage018151" / "DDSImage.xml"
+            escape_manifest = game_root / "Option" / "A133" / "ddsImage" / "ddsImage018152" / "DDSImage.xml"
+            missing_xml.parent.mkdir(parents=True)
+            escape_xml.parent.mkdir(parents=True)
+            missing_manifest.parent.mkdir(parents=True)
+            escape_manifest.parent.mkdir(parents=True)
+            missing_xml.write_text(
+                """<CharacterData>
+                <name><id>18151</id><str>Missing Manifest Image</str></name>
+                <defaultImages><str>chara18151_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            escape_xml.write_text(
+                """<CharacterData>
+                <name><id>18152</id><str>Escaping Manifest Image</str></name>
+                <defaultImages><str>chara18152_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            missing_manifest.write_text(
+                """<DDSImageData>
+                <name><str>chara18151_00</str></name>
+                <ddsFile0><path>missing.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            escape_manifest.write_text(
+                """<DDSImageData>
+                <name><str>chara18152_00</str></name>
+                <ddsFile0><path>../../../../outside.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            catalog = Catalog(
+                game_root=game_root,
+                generated_at=0.0,
+                characters=[
+                    parse_character(missing_xml, game_root),
+                    parse_character(escape_xml, game_root),
+                ],
+            )
+
+            self.assertEqual(catalog.characters[0]["imageUrl"], "")
+            self.assertEqual(catalog.characters[1]["imageUrl"], "")
+            self.assertIsNone(find_character_image_path(catalog, catalog.characters[0]["source"]))
+            self.assertIsNone(find_character_image_path(catalog, catalog.characters[1]["source"]))
 
 
 if __name__ == "__main__":

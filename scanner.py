@@ -126,12 +126,10 @@ def parse_music(path: Path, root_dir: Path) -> MusicItem:
 def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
     root = parse_xml(path)
     image = child_text(root, "image/path") if root is not None else ""
+    image_key = child_text(root, "defaultImages/str") if root is not None else ""
     source = relpath(path, root_dir)
-    image_url = ""
-    if image:
-        image_path = (path.parent / image).resolve()
-        if is_under_root(image_path, root_dir) and image_path.is_file():
-            image_url = f"/api/character-image?source={quote(source)}"
+    image_path = resolve_character_image_path(path, root_dir, image, image_key)
+    image_url = f"/api/character-image?source={quote(source)}" if image_path is not None else ""
     return {
         "dataName": child_text(root, "dataName") if root is not None else fallback_field(path, "dataName"),
         "id": child_int(root, "name/id") if root is not None else 0,
@@ -139,7 +137,7 @@ def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
         "works": child_text(root, "works/str") if root is not None else "",
         "image": image,
         "imageUrl": image_url,
-        "imageKey": child_text(root, "defaultImages/str") if root is not None else "",
+        "imageKey": image_key,
         "defaultHave": child_bool(root, "defaultHave") if root is not None else False,
         "enabled": not child_bool(root, "disableFlag") if root is not None else True,
         "source": source,
@@ -174,18 +172,94 @@ def find_jacket_path(catalog: Catalog, source: str) -> Path | None:
 
 
 def find_character_image_path(catalog: Catalog, source: str) -> Path | None:
-    item = next((entry for entry in catalog.characters if entry.get("source") == source), None)
-    if not item or not item.get("image"):
-        return None
-
     try:
         source_path = safe_game_path(catalog.game_root, source)
     except ValueError:
         return None
-    image_path = (source_path.parent / item["image"]).resolve()
-    if not is_under_root(image_path, catalog.game_root) or not image_path.is_file():
+
+    item = next((entry for entry in catalog.characters if entry.get("source") == source), None)
+    if not item:
+        return None
+
+    return resolve_character_image_path(
+        source_path,
+        catalog.game_root,
+        str(item.get("image") or ""),
+        str(item.get("imageKey") or ""),
+    )
+
+
+def resolve_character_image_path(
+    character_xml_path: Path,
+    root_dir: Path,
+    image: str,
+    image_key: str,
+) -> Path | None:
+    direct_image_path = resolve_character_direct_image_path(character_xml_path, root_dir, image)
+    if direct_image_path is not None:
+        return direct_image_path
+    return resolve_character_manifest_image_path(character_xml_path, root_dir, image_key)
+
+
+def resolve_character_direct_image_path(character_xml_path: Path, root_dir: Path, image: str) -> Path | None:
+    if not image:
+        return None
+    image_path = (character_xml_path.parent / image).resolve()
+    if not is_under_root(image_path, root_dir) or not image_path.is_file():
         return None
     return image_path
+
+
+def resolve_character_manifest_image_path(character_xml_path: Path, root_dir: Path, image_key: str) -> Path | None:
+    if not image_key:
+        return None
+
+    manifest_path = character_dds_manifest_path(character_xml_path, root_dir)
+    if manifest_path is None or not manifest_path.is_file():
+        return None
+
+    manifest_root = parse_xml(manifest_path)
+    if manifest_root is None:
+        return None
+
+    if child_text(manifest_root, "name/str") != image_key:
+        return None
+
+    dds_relative_path = child_text(manifest_root, "ddsFile0/path")
+    if not dds_relative_path:
+        return None
+
+    image_path = (manifest_path.parent / dds_relative_path).resolve()
+    if not is_under_root(image_path, root_dir) or not image_path.is_file():
+        return None
+    return image_path
+
+
+def character_dds_manifest_path(character_xml_path: Path, root_dir: Path) -> Path | None:
+    try:
+        relative_parts = character_xml_path.relative_to(root_dir).parts
+    except ValueError:
+        return None
+
+    chara_dir_name = character_xml_path.parent.name
+    if not chara_dir_name.startswith("chara"):
+        return None
+    suffix = chara_dir_name[len("chara") :]
+    if not suffix:
+        return None
+
+    lower_parts = tuple(part.casefold() for part in relative_parts)
+    if len(relative_parts) >= 4 and lower_parts[0] == "option":
+        pack_root = root_dir / relative_parts[0] / relative_parts[1]
+    elif len(relative_parts) >= 5 and lower_parts[0] == "bin" and lower_parts[1] == "option":
+        pack_root = root_dir / relative_parts[0] / relative_parts[1] / relative_parts[2]
+    else:
+        return None
+
+    manifest_path = (pack_root / "ddsImage" / f"ddsImage{suffix}" / "DDSImage.xml").resolve()
+    if not is_under_root(manifest_path, root_dir):
+        return None
+    return manifest_path
 
 
 def safe_game_path(root_dir: Path, relative_path: str) -> Path:
