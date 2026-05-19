@@ -127,13 +127,18 @@ def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
     root = parse_xml(path)
     image = child_text(root, "image/path") if root is not None else ""
     source = relpath(path, root_dir)
+    image_url = ""
+    if image:
+        image_path = (path.parent / image).resolve()
+        if is_under_root(image_path, root_dir) and image_path.is_file():
+            image_url = f"/api/character-image?source={quote(source)}"
     return {
         "dataName": child_text(root, "dataName") if root is not None else fallback_field(path, "dataName"),
         "id": child_int(root, "name/id") if root is not None else 0,
         "name": child_text(root, "name/str") if root is not None else path.parent.name,
         "works": child_text(root, "works/str") if root is not None else "",
         "image": image,
-        "imageUrl": f"/api/character-image?source={quote(source)}" if image else "",
+        "imageUrl": image_url,
         "imageKey": child_text(root, "defaultImages/str") if root is not None else "",
         "defaultHave": child_bool(root, "defaultHave") if root is not None else False,
         "enabled": not child_bool(root, "disableFlag") if root is not None else True,

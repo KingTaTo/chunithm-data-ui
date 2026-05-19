@@ -13,7 +13,9 @@ class ScannerCharacterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             game_root = Path(tmpdir)
             xml_path = game_root / "data" / "character" / "0001" / "CHU_UI_Character_0001.xml"
+            image_path = game_root / "data" / "character" / "0001" / "images" / "character-card.dds"
             xml_path.parent.mkdir(parents=True)
+            image_path.parent.mkdir(parents=True, exist_ok=True)
             xml_path.write_text(
                 """<CharacterData>
                 <dataName>character0001</dataName>
@@ -25,6 +27,7 @@ class ScannerCharacterTests(unittest.TestCase):
                 </CharacterData>""",
                 encoding="utf-8",
             )
+            image_path.write_bytes(b"dds")
 
             item = parse_character(xml_path, game_root)
 
@@ -103,6 +106,11 @@ class ScannerCharacterTests(unittest.TestCase):
                     parse_character(escape_xml, game_root),
                 ],
             )
+
+            self.assertEqual(catalog.characters[0]["image"], "images/missing.dds")
+            self.assertEqual(catalog.characters[0]["imageUrl"], "")
+            self.assertEqual(catalog.characters[1]["image"], "../../../../outside.dds")
+            self.assertEqual(catalog.characters[1]["imageUrl"], "")
 
             self.assertIsNone(
                 find_character_image_path(catalog, "data/character/0004/CHU_UI_Character_0004.xml")
