@@ -176,15 +176,16 @@ function openImageModal(imageUrl, imageName) {
   focusTarget.focus();
 }
 
-function closeImageModal() {
+function closeImageModal(options = {}) {
   if (!state.modalImageUrl) return;
+  const { restoreFocus = true } = options;
   state.modalImageUrl = "";
   el("image-modal").classList.add("hidden");
   el("image-modal").setAttribute("aria-hidden", "true");
   el("image-modal-image").src = "";
   el("image-modal-image").alt = "";
   document.body.classList.remove("modal-open");
-  if (state.lastFocusedElement && document.contains(state.lastFocusedElement)) {
+  if (restoreFocus && state.lastFocusedElement && document.contains(state.lastFocusedElement)) {
     state.lastFocusedElement.focus();
   }
   state.lastFocusedElement = null;
@@ -202,7 +203,7 @@ async function loadCategory() {
   setCategoryView(requestCategory);
 
   if (requestCategory === "characters") {
-    closeImageModal();
+    closeImageModal({ restoreFocus: false });
     renderGridMessage("Loading...");
   } else {
     renderHead();
@@ -249,7 +250,7 @@ document.querySelectorAll(".tab").forEach((button) => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("active"));
     button.classList.add("active");
     state.category = button.dataset.category;
-    if (state.category !== "characters") closeImageModal();
+    if (state.category !== "characters") closeImageModal({ restoreFocus: false });
     await loadCategory();
   });
 });
@@ -299,6 +300,12 @@ document.addEventListener("keydown", (event) => {
 
   const first = focusables[0];
   const last = focusables[focusables.length - 1];
+
+  if (!el("image-modal").contains(document.activeElement)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+    return;
+  }
 
   if (event.shiftKey && document.activeElement === first) {
     event.preventDefault();
