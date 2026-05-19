@@ -11,12 +11,15 @@ from scanner import find_character_image_path, find_jacket_path, scan_game_root
 
 # Keeps the scanned catalog and converted jacket images in memory between API calls.
 class CatalogStore:
+    CHARACTER_THUMBNAIL_MAX_DIMENSION = 240
+
     def __init__(self, game_root: Path) -> None:
         self.game_root = game_root
         self._lock = threading.Lock()
         self._catalog: Catalog | None = None
         self._jacket_cache: dict[str, bytes] = {}
         self._character_image_cache: dict[str, bytes] = {}
+        self._character_thumbnail_cache: dict[str, bytes] = {}
         self._is_scanning = False
         self._last_error: str | None = None
 
@@ -48,6 +51,7 @@ class CatalogStore:
                 self._catalog = catalog
                 self._jacket_cache.clear()
                 self._character_image_cache.clear()
+                self._character_thumbnail_cache.clear()
             return catalog
         except Exception as exc:  # pragma: no cover - surfaced through API
             with self._lock:
@@ -87,4 +91,20 @@ class CatalogStore:
         png_data = dds_to_png(image_path)
         with self._lock:
             self._character_image_cache[source] = png_data
+        return png_data
+
+    def character_image_thumbnail_png(self, source: str) -> bytes:
+        with self._lock:
+            cached = self._character_thumbnail_cache.get(source)
+            if cached is not None:
+                return cached
+
+        catalog = self.get() or self.scan()
+        image_path = find_character_image_path(catalog, source)
+        if image_path is None:
+            raise FileNotFoundError("No character DDS file was found for this character entry")
+
+        png_data = dds_to_png(image_path, max_dimension=self.CHARACTER_THUMBNAIL_MAX_DIMENSION)
+        with self._lock:
+            self._character_thumbnail_cache[source] = png_data
         return png_data

@@ -101,12 +101,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def serve_character_image(self, query: dict[str, list[str]]) -> None:
         source = query.get("source", [""])[0]
+        variant = query.get("variant", [""])[0]
         if not source:
             self.send_error(HTTPStatus.BAD_REQUEST, "Missing source parameter")
             return
 
         try:
-            data = self.store.character_image_png(source)
+            if variant == "thumb":
+                data = self.store.character_image_thumbnail_png(source)
+            else:
+                data = self.store.character_image_png(source)
         except RuntimeError as exc:
             self.send_error(HTTPStatus.NOT_IMPLEMENTED, str(exc))
             return

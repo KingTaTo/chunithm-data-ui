@@ -5,10 +5,43 @@ import unittest
 from pathlib import Path
 
 from models import Catalog
-from scanner import find_character_image_path, parse_character
+from scanner import dedupe_characters, find_character_image_path, parse_character
 
 
 class ScannerCharacterTests(unittest.TestCase):
+    def test_dedupe_characters_prefers_option_character_for_repeated_id(self) -> None:
+        items = [
+            {
+                "id": 42,
+                "name": "Base Character",
+                "source": "data/character/0042/Chara.xml",
+                "pack": "base",
+                "imageUrl": "/api/character-image?source=data/character/0042/Chara.xml",
+                "imageThumbUrl": "/api/character-image?source=data/character/0042/Chara.xml&variant=thumb",
+            },
+            {
+                "id": 42,
+                "name": "Option Character",
+                "source": "bin/option/A001/chara/chara0042/Chara.xml",
+                "pack": "A001",
+                "imageUrl": "/api/character-image?source=bin/option/A001/chara/chara0042/Chara.xml",
+                "imageThumbUrl": "/api/character-image?source=bin/option/A001/chara/chara0042/Chara.xml&variant=thumb",
+            },
+            {
+                "id": 43,
+                "name": "Unique Character",
+                "source": "data/character/0043/Chara.xml",
+                "pack": "base",
+            },
+        ]
+
+        result = dedupe_characters(items)
+
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["id"], 42)
+        self.assertEqual(result[0]["source"], "bin/option/A001/chara/chara0042/Chara.xml")
+        self.assertEqual(result[1]["id"], 43)
+
     def test_parse_character_includes_image_and_character_image_url(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             game_root = Path(tmpdir)
@@ -36,6 +69,10 @@ class ScannerCharacterTests(unittest.TestCase):
                 item["imageUrl"],
                 "/api/character-image?source=data/character/0001/CHU_UI_Character_0001.xml",
             )
+            self.assertEqual(
+                item["imageThumbUrl"],
+                "/api/character-image?source=data/character/0001/CHU_UI_Character_0001.xml&variant=thumb",
+            )
 
     def test_parse_character_uses_empty_image_url_when_image_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -55,6 +92,7 @@ class ScannerCharacterTests(unittest.TestCase):
 
             self.assertEqual(item["image"], "")
             self.assertEqual(item["imageUrl"], "")
+            self.assertEqual(item["imageThumbUrl"], "")
 
     def test_find_character_image_path_resolves_relative_to_character_xml(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -108,6 +146,10 @@ class ScannerCharacterTests(unittest.TestCase):
             self.assertEqual(
                 item["imageUrl"],
                 "/api/character-image?source=Option/A133/chara/chara018150/Chara.xml",
+            )
+            self.assertEqual(
+                item["imageThumbUrl"],
+                "/api/character-image?source=Option/A133/chara/chara018150/Chara.xml&variant=thumb",
             )
 
     def test_find_character_image_path_resolves_dds_manifest_relative_to_pack(self) -> None:
@@ -172,8 +214,10 @@ class ScannerCharacterTests(unittest.TestCase):
 
             self.assertEqual(catalog.characters[0]["image"], "images/missing.dds")
             self.assertEqual(catalog.characters[0]["imageUrl"], "")
+            self.assertEqual(catalog.characters[0]["imageThumbUrl"], "")
             self.assertEqual(catalog.characters[1]["image"], "../../../../outside.dds")
             self.assertEqual(catalog.characters[1]["imageUrl"], "")
+            self.assertEqual(catalog.characters[1]["imageThumbUrl"], "")
 
             self.assertIsNone(
                 find_character_image_path(catalog, "data/character/0004/CHU_UI_Character_0004.xml")
@@ -251,7 +295,9 @@ class ScannerCharacterTests(unittest.TestCase):
             )
 
             self.assertEqual(catalog.characters[0]["imageUrl"], "")
+            self.assertEqual(catalog.characters[0]["imageThumbUrl"], "")
             self.assertEqual(catalog.characters[1]["imageUrl"], "")
+            self.assertEqual(catalog.characters[1]["imageThumbUrl"], "")
             self.assertIsNone(find_character_image_path(catalog, catalog.characters[0]["source"]))
             self.assertIsNone(find_character_image_path(catalog, catalog.characters[1]["source"]))
 

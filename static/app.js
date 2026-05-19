@@ -2,10 +2,17 @@ const state = {
   category: "music",
   query: "",
   summary: null,
+  pageByCategory: {
+    music: 0,
+    characters: 0,
+    nameplates: 0,
+  },
   modalImageUrl: "",
   activeRequestToken: 0,
   lastFocusedElement: null,
 };
+
+const PAGE_SIZE = 100;
 
 // Column definitions stay paired with the backend category names.
 const columns = {
@@ -15,6 +22,10 @@ const columns = {
 
 const el = (id) => document.getElementById(id);
 const currentColumns = () => columns[state.category] || [];
+const currentPage = () => state.pageByCategory[state.category] || 0;
+const setCurrentPage = (page) => {
+  state.pageByCategory[state.category] = Math.max(0, page);
+};
 
 function categoryLabel() {
   return document.querySelector(`.tab[data-category="${state.category}"]`)?.textContent || state.category;
@@ -77,8 +88,24 @@ function setCategoryView(category) {
 function renderResultCount(total, shown) {
   const label = categoryLabel().toLowerCase();
   const noun = total === 1 ? label.replace(/s$/, "") : label;
-  const suffix = shown < total ? `, showing first ${shown}` : "";
-  el("results-count").textContent = `${total.toLocaleString()} ${noun}${suffix}`;
+  const offset = currentPage() * PAGE_SIZE;
+  const start = total === 0 ? 0 : offset + 1;
+  const end = total === 0 ? 0 : Math.min(offset + shown, total);
+  el("results-count").textContent = `${total.toLocaleString()} ${noun}, showing ${start.toLocaleString()}-${end.toLocaleString()}`;
+}
+
+function renderPagination(total) {
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const activePage = Math.min(currentPage() + 1, pageCount);
+  el("page-status").textContent = `Page ${activePage} of ${pageCount}`;
+  el("page-prev").disabled = currentPage() <= 0;
+  el("page-next").disabled = activePage >= pageCount;
+}
+
+function renderLoadingState() {
+  el("page-status").textContent = "Loading page...";
+  el("page-prev").disabled = true;
+  el("page-next").disabled = true;
 }
 
 function renderTableMessage(message) {
@@ -142,9 +169,10 @@ function modalFocusableElements() {
 function renderCharacterCard(item) {
   const name = item.name || item.dataName || "Unknown character";
   const imageUrl = versionedImageUrl(item.imageUrl);
-  const thumb = item.imageUrl ? `
+  const imageThumbUrl = versionedImageUrl(item.imageThumbUrl);
+  const thumb = item.imageUrl && item.imageThumbUrl ? `
     <button class="character-thumb-button" type="button" data-image-url="${escapeHtml(imageUrl)}" data-image-name="${escapeHtml(name)}">
-      <img class="character-thumb" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">
+      <img class="character-thumb" src="${escapeHtml(imageThumbUrl)}" alt="${escapeHtml(name)}" loading="lazy">
     </button>
   ` : `
     <div class="character-thumb-placeholder">No image</div>
@@ -219,7 +247,12 @@ async function loadCategory() {
     renderTableMessage("Loading...");
   }
 
-  const params = new URLSearchParams({ limit: "400" });
+  renderLoadingState();
+
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(currentPage() * PAGE_SIZE),
+  });
   if (requestQuery) params.set("q", requestQuery);
 
   try {
@@ -228,6 +261,7 @@ async function loadCategory() {
       return;
     }
     renderResultCount(data.total, data.items.length);
+    renderPagination(data.total);
 
     if (requestCategory === "characters") {
       renderCharacterGrid(data.items);
@@ -240,6 +274,9 @@ async function loadCategory() {
     }
     const message = error instanceof Error ? error.message : String(error);
     el("results-count").textContent = "Unable to load results";
+    el("page-status").textContent = "Pagination unavailable";
+    el("page-prev").disabled = true;
+    el("page-next").disabled = true;
     if (requestCategory === "characters") {
       renderGridMessage(message);
       return;
@@ -266,6 +303,9 @@ document.querySelectorAll(".tab").forEach((button) => {
 
 el("search").addEventListener("input", () => {
   state.query = el("search").value.trim();
+  Object.keys(state.pageByCategory).forEach((category) => {
+    state.pageByCategory[category] = 0;
+  });
   window.clearTimeout(searchTimer);
   searchTimer = window.setTimeout(loadCategory, 180);
 });
@@ -276,11 +316,25 @@ el("rescan").addEventListener("click", async () => {
   try {
     const summary = await fetchJson("/api/rescan");
     renderStats(summary);
+    Object.keys(state.pageByCategory).forEach((category) => {
+      state.pageByCategory[category] = 0;
+    });
     await loadCategory();
   } finally {
     el("rescan").disabled = false;
     el("rescan").textContent = "Rescan";
   }
+});
+
+el("page-prev").addEventListener("click", async () => {
+  if (currentPage() <= 0) return;
+  setCurrentPage(currentPage() - 1);
+  await loadCategory();
+});
+
+el("page-next").addEventListener("click", async () => {
+  setCurrentPage(currentPage() + 1);
+  await loadCategory();
 });
 
 el("character-grid").addEventListener("click", (event) => {

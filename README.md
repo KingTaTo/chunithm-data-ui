@@ -8,10 +8,12 @@ The app scans extracted metadata files, exposes a few JSON endpoints, and render
 
 - Scans `Music.xml`, `Chara.xml`, and `NamePlate.xml` files anywhere under the selected game root.
 - Deduplicates music entries so the preferred copy is shown when the same song appears in multiple packs.
+- Deduplicates character entries by character ID so repeated pack copies do not render duplicate cards.
 - Reports coarse file-extension statistics and detected option packs.
 - Filters category results server-side with search, pagination, and enabled-state filtering.
 - Converts jacket `.dds` textures to PNG on demand for browser display.
-- Keeps the last scanned catalog and generated jacket PNGs in memory for fast repeated requests.
+- Serves character previews as smaller PNG thumbnails and loads full-resolution character art only when selected.
+- Keeps the last scanned catalog plus generated jacket, character thumbnail, and full character PNGs in memory for fast repeated requests.
 
 ## Requirements
 
@@ -90,8 +92,11 @@ Within that ranking, the current logic gives the `azen` pack lower priority than
 
 - The browser UI loads the summary first, then fetches the active tab's rows.
 - The search box sends debounced `q` requests to the current category endpoint.
-- The Rescan button triggers `GET /api/rescan`, refreshes the summary, and clears the in-memory jacket PNG cache as part of the new scan.
-- The current UI requests up to `400` rows per category even though the backend supports larger paginated result sets.
+- The Rescan button triggers `GET /api/rescan`, refreshes the summary, and clears the in-memory jacket, character thumbnail, and full character PNG caches as part of the new scan.
+- All tabs page through results in slices of `100` items using the backend `limit` and `offset` parameters.
+- Each tab remembers its own current result page when you switch away and back.
+- Changing the search query or rescanning resets all tabs back to the first result page.
+- The Characters tab uses thumbnail previews in the grid and requests the full PNG only when you open the modal.
 
 ## HTTP API
 
@@ -104,6 +109,8 @@ The UI is backed by a small read-only HTTP API:
 - `GET /api/characters`: paginated character results
 - `GET /api/nameplates`: paginated name plate results
 - `GET /api/jacket?source=<game-relative-path>`: converts and serves a jacket image as PNG
+- `GET /api/character-image?source=<game-relative-path>`: serves the full character image as PNG
+- `GET /api/character-image?source=<game-relative-path>&variant=thumb`: serves a thumbnail PNG for character grid previews
 
 Category endpoints support these query parameters:
 
@@ -116,9 +123,10 @@ Category endpoints support these query parameters:
 Response notes:
 
 - `GET /api/music`, `GET /api/characters`, and `GET /api/nameplates` return `{ "items": [...], "total": <filtered-count> }`.
+- Character items include both `imageUrl` for the full modal image and `imageThumbUrl` for grid previews when a valid image can be resolved.
 - `GET /api/summary` and `GET /api/rescan` return the catalog summary shape from `Catalog.as_summary()`.
 - `GET /api/status` returns scan lifecycle fields plus the cached summary when one exists.
-- `GET /api/jacket` returns `404` for missing or invalid sources and `501` when `py_dds` is not installed.
+- `GET /api/jacket` and `GET /api/character-image` return `404` for missing or invalid sources and `501` when `py_dds` is not installed.
 
 ## Project layout
 
@@ -137,7 +145,8 @@ Response notes:
 
 - The server uses `ThreadingHTTPServer` and keeps state in a process-local `CatalogStore`.
 - Jacket conversion happens lazily per request and is cached by source path.
-- A successful rescan replaces the cached catalog and clears the jacket cache.
+- Character previews and full character images are cached separately so the grid can stay light while the modal still uses the original resolution.
+- A successful rescan replaces the cached catalog and clears the jacket, character thumbnail, and full character image caches.
 - Paths used for jacket lookup are validated to stay under the selected game root.
 - The project currently has no automated test suite in the repository.
 

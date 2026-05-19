@@ -130,6 +130,7 @@ def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
     source = relpath(path, root_dir)
     image_path = resolve_character_image_path(path, root_dir, image, image_key)
     image_url = f"/api/character-image?source={quote(source)}" if image_path is not None else ""
+    image_thumb_url = f"{image_url}&variant=thumb" if image_url else ""
     return {
         "dataName": child_text(root, "dataName") if root is not None else fallback_field(path, "dataName"),
         "id": child_int(root, "name/id") if root is not None else 0,
@@ -137,6 +138,7 @@ def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
         "works": child_text(root, "works/str") if root is not None else "",
         "image": image,
         "imageUrl": image_url,
+        "imageThumbUrl": image_thumb_url,
         "imageKey": image_key,
         "defaultHave": child_bool(root, "defaultHave") if root is not None else False,
         "enabled": not child_bool(root, "disableFlag") if root is not None else True,
@@ -345,6 +347,24 @@ def dedupe_music(items: list[MusicItem]) -> list[MusicItem]:
     return sorted(by_key.values(), key=lambda item: (int(item.get("id") or 0), str(item.get("source", ""))))
 
 
+def character_dedupe_key(item: dict[str, Any]) -> tuple[str, int | str]:
+    character_id = int(item.get("id") or 0)
+    if character_id >= 0:
+        return ("id", character_id)
+    data_name = str(item.get("dataName") or item.get("source") or "")
+    return ("dataName", data_name)
+
+
+def dedupe_characters(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_key: dict[tuple[str, int | str], dict[str, Any]] = {}
+    for item in items:
+        key = character_dedupe_key(item)
+        current = by_key.get(key)
+        if current is None or music_dedupe_rank(item) < music_dedupe_rank(current):
+            by_key[key] = item
+    return sorted(by_key.values(), key=lambda item: (int(item.get("id") or 0), str(item.get("source", ""))))
+
+
 def scan_game_root(root_dir: Path) -> Catalog:
     root_dir = root_dir.resolve()
     if not root_dir.exists():
@@ -352,7 +372,7 @@ def scan_game_root(root_dir: Path) -> Catalog:
     catalog = Catalog(game_root=root_dir, generated_at=time.time())
     catalog.stats = scan_files(root_dir)
     catalog.music = dedupe_music(scan_category(root_dir, TAG_PATTERNS["music"], parse_music))
-    catalog.characters = scan_category(root_dir, TAG_PATTERNS["characters"], parse_character)
+    catalog.characters = dedupe_characters(scan_category(root_dir, TAG_PATTERNS["characters"], parse_character))
     catalog.nameplates = scan_category(root_dir, TAG_PATTERNS["nameplates"], parse_nameplate)
     for key in ["music", "characters", "nameplates"]:
         if len(getattr(catalog, key)) >= MAX_ITEMS_PER_CATEGORY:

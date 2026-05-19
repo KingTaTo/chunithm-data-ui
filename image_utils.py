@@ -24,7 +24,30 @@ def rgba_to_png(width: int, height: int, rgba: bytes) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", header) + png_chunk(b"IDAT", zlib.compress(raw)) + png_chunk(b"IEND", b"")
 
 
-def dds_to_png(path: Path) -> bytes:
+def resize_rgba_nearest(width: int, height: int, rgba: bytes, max_dimension: int) -> tuple[int, int, bytes]:
+    if max_dimension <= 0:
+        raise ValueError("max_dimension must be positive")
+    largest = max(width, height)
+    if largest <= max_dimension:
+        return width, height, rgba
+
+    scale = max_dimension / largest
+    target_width = max(1, int(width * scale))
+    target_height = max(1, int(height * scale))
+    resized = bytearray(target_width * target_height * 4)
+
+    for y in range(target_height):
+        source_y = min(height - 1, int(y / scale))
+        for x in range(target_width):
+            source_x = min(width - 1, int(x / scale))
+            source_offset = (source_y * width + source_x) * 4
+            target_offset = (y * target_width + x) * 4
+            resized[target_offset:target_offset + 4] = rgba[source_offset:source_offset + 4]
+
+    return target_width, target_height, bytes(resized)
+
+
+def dds_to_png(path: Path, max_dimension: int | None = None) -> bytes:
     try:
         import py_dds
     except ImportError as exc:
@@ -40,4 +63,7 @@ def dds_to_png(path: Path) -> bytes:
         rgba[offset:offset + 4] = bytes((r, g, b, a))
 
     dds.draw(set_pixel_callback=set_pixel, mip=0)
-    return rgba_to_png(width, height, bytes(rgba))
+    rgba_bytes = bytes(rgba)
+    if max_dimension is not None:
+        width, height, rgba_bytes = resize_rgba_nearest(width, height, rgba_bytes, max_dimension)
+    return rgba_to_png(width, height, rgba_bytes)

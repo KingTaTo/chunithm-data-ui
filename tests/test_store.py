@@ -16,6 +16,7 @@ class CatalogStoreTests(unittest.TestCase):
             store = CatalogStore(game_root)
             store._jacket_cache["music.xml"] = b"jacket"
             store._character_image_cache["character.xml"] = b"character"
+            store._character_thumbnail_cache["character.xml"] = b"thumbnail"
             catalog = Catalog(game_root=game_root, generated_at=1.0)
 
             with patch("store.scan_game_root", return_value=catalog):
@@ -24,6 +25,7 @@ class CatalogStoreTests(unittest.TestCase):
             self.assertIs(result, catalog)
             self.assertEqual(store._jacket_cache, {})
             self.assertEqual(store._character_image_cache, {})
+            self.assertEqual(store._character_thumbnail_cache, {})
 
     def test_character_image_png_reuses_cached_bytes(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -47,6 +49,29 @@ class CatalogStoreTests(unittest.TestCase):
             self.assertEqual(first, b"png")
             self.assertIs(second, first)
             convert.assert_called_once_with(image_path.resolve())
+
+    def test_character_image_thumbnail_png_reuses_cached_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            image_path = game_root / "data" / "character" / "0001" / "portrait.dds"
+            image_path.parent.mkdir(parents=True)
+            image_path.write_bytes(b"dds")
+            source = "data/character/0001/CHU_UI_Character_0001.xml"
+            catalog = Catalog(
+                game_root=game_root,
+                generated_at=1.0,
+                characters=[{"source": source, "image": "portrait.dds"}],
+            )
+            store = CatalogStore(game_root)
+            store._catalog = catalog
+
+            with patch("store.dds_to_png", return_value=b"thumb") as convert:
+                first = store.character_image_thumbnail_png(source)
+                second = store.character_image_thumbnail_png(source)
+
+            self.assertEqual(first, b"thumb")
+            self.assertIs(second, first)
+            convert.assert_called_once_with(image_path.resolve(), max_dimension=240)
 
     def test_character_image_png_resolves_manifest_backed_image(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

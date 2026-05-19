@@ -89,6 +89,26 @@ class HandlerCharacterImageRouteTests(unittest.TestCase):
         self.assertEqual(handler.wfile.getvalue(), b"png-bytes")
         handler.store.character_image_png.assert_called_once_with("data/character/0001/entry.xml")
 
+    def test_character_image_route_uses_thumbnail_variant_when_requested(self) -> None:
+        handler = self.make_handler()
+        handler.store.character_image_thumbnail_png.return_value = b"thumb-bytes"
+
+        handler.path = "/api/character-image?source=data/character/0001/entry.xml&variant=thumb"
+        handler.do_GET()
+
+        self.assertEqual(handler._status, HTTPStatus.OK)
+        self.assertEqual(
+            handler._headers,
+            [
+                ("Content-Type", "image/png"),
+                ("Cache-Control", "public, max-age=3600"),
+                ("Content-Length", str(len(b"thumb-bytes"))),
+            ],
+        )
+        self.assertEqual(handler.wfile.getvalue(), b"thumb-bytes")
+        handler.store.character_image_thumbnail_png.assert_called_once_with("data/character/0001/entry.xml")
+        handler.store.character_image_png.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
