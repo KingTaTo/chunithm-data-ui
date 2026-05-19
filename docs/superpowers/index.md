@@ -8,3 +8,9 @@
 - `2026-05-19-paginated-category-results`
   - Spec: `docs/superpowers/specs/2026-05-19-paginated-category-results.md`
   - Plan: `docs/superpowers/plans/2026-05-19-paginated-category-results.md`
+- `2026-05-19-hide-broken-character-thumbnails`
+  - Spec: `docs/superpowers/specs/2026-05-19-hide-broken-character-thumbnails.md`
+  - Plan: `docs/superpowers/plans/2026-05-19-hide-broken-character-thumbnails.md`
+- `2026-05-19-azen-character-image-fallback`
+  - Spec: `docs/superpowers/specs/2026-05-19-azen-character-image-fallback.md`
+  - Plan: `docs/superpowers/plans/2026-05-19-azen-character-image-fallback.md`

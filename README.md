@@ -88,6 +88,8 @@ Music entries are deduplicated before they are returned. When the same song appe
 
 Within that ranking, the current logic gives the `azen` pack lower priority than other packs.
 
+Character image discovery usually follows each pack's local `ddsImage/.../DDSImage.xml` manifest layout. For `AZEN` character entries, the scanner also falls back to `data/a000/ddsImage/...` when the pack-local manifest is absent.
+
 ## UI behavior
 
 - The browser UI loads the summary first, then fetches the active tab's rows.
@@ -97,6 +99,7 @@ Within that ranking, the current logic gives the `azen` pack lower priority than
 - Each tab remembers its own current result page when you switch away and back.
 - Changing the search query or rescanning resets all tabs back to the first result page.
 - The Characters tab uses thumbnail previews in the grid and requests the full PNG only when you open the modal.
+- Character cards fall back to the existing `No image` placeholder when a thumbnail request fails in the browser.
 
 ## HTTP API
 
@@ -124,6 +127,8 @@ Response notes:
 
 - `GET /api/music`, `GET /api/characters`, and `GET /api/nameplates` return `{ "items": [...], "total": <filtered-count> }`.
 - Character items include both `imageUrl` for the full modal image and `imageThumbUrl` for grid previews when a valid image can be resolved.
+- `AZEN` character entries may resolve their image manifests from `data/a000` when the pack-local `ddsImage` manifest is missing.
+- The browser replaces failed character thumbnail requests with the same `No image` placeholder used for entries that never had a thumbnail URL.
 - `GET /api/summary` and `GET /api/rescan` return the catalog summary shape from `Catalog.as_summary()`.
 - `GET /api/status` returns scan lifecycle fields plus the cached summary when one exists.
 - `GET /api/jacket` and `GET /api/character-image` return `404` for missing or invalid sources and `501` when `py_dds` is not installed.
@@ -139,6 +144,7 @@ Response notes:
 - `config.py`: shared constants for roots, caps, and scan target names
 - `static/index.html`: UI shell
 - `static/app.js`: browser-side fetch, tabs, search, and rendering
+- `static/character_thumbs.js`: character thumbnail placeholder and failed-image fallback helpers
 - `static/styles.css`: layout and visual styling
 
 ## Development notes

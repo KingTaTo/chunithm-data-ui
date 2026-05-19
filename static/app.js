@@ -170,12 +170,13 @@ function renderCharacterCard(item) {
   const name = item.name || item.dataName || "Unknown character";
   const imageUrl = versionedImageUrl(item.imageUrl);
   const imageThumbUrl = versionedImageUrl(item.imageThumbUrl);
+  const placeholder = CharacterThumbs.characterThumbPlaceholderHtml();
   const thumb = item.imageUrl && item.imageThumbUrl ? `
     <button class="character-thumb-button" type="button" data-image-url="${escapeHtml(imageUrl)}" data-image-name="${escapeHtml(name)}">
       <img class="character-thumb" src="${escapeHtml(imageThumbUrl)}" alt="${escapeHtml(name)}" loading="lazy">
     </button>
   ` : `
-    <div class="character-thumb-placeholder">No image</div>
+    ${placeholder}
   `;
 
   return `<article class="character-card">
@@ -342,6 +343,10 @@ el("character-grid").addEventListener("click", (event) => {
   if (!button) return;
   openImageModal(button.dataset.imageUrl || "", button.dataset.imageName || "Character image preview");
 });
+
+el("character-grid").addEventListener("error", (event) => {
+  CharacterThumbs.replaceFailedCharacterThumb(event.target);
+}, true);
 
 el("image-modal-close").addEventListener("click", closeImageModal);
 el("image-modal-backdrop").addEventListener("click", closeImageModal);

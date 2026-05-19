@@ -216,52 +216,69 @@ def resolve_character_manifest_image_path(character_xml_path: Path, root_dir: Pa
     if not image_key:
         return None
 
-    manifest_path = character_dds_manifest_path(character_xml_path, root_dir)
-    if manifest_path is None or not manifest_path.is_file():
-        return None
+    for manifest_path in character_dds_manifest_paths(character_xml_path, root_dir):
+        if not manifest_path.is_file():
+            continue
 
-    manifest_root = parse_xml(manifest_path)
-    if manifest_root is None:
-        return None
+        manifest_root = parse_xml(manifest_path)
+        if manifest_root is None:
+            continue
 
-    if child_text(manifest_root, "name/str") != image_key:
-        return None
+        if child_text(manifest_root, "name/str") != image_key:
+            continue
 
-    dds_relative_path = child_text(manifest_root, "ddsFile0/path")
-    if not dds_relative_path:
-        return None
+        dds_relative_path = child_text(manifest_root, "ddsFile0/path")
+        if not dds_relative_path:
+            continue
 
-    image_path = (manifest_path.parent / dds_relative_path).resolve()
-    if not is_under_root(image_path, root_dir) or not image_path.is_file():
-        return None
-    return image_path
+        image_path = (manifest_path.parent / dds_relative_path).resolve()
+        if not is_under_root(image_path, root_dir) or not image_path.is_file():
+            continue
+        return image_path
+
+    return None
 
 
 def character_dds_manifest_path(character_xml_path: Path, root_dir: Path) -> Path | None:
+    paths = character_dds_manifest_paths(character_xml_path, root_dir)
+    return paths[0] if paths else None
+
+
+def character_dds_manifest_paths(character_xml_path: Path, root_dir: Path) -> list[Path]:
     try:
         relative_parts = character_xml_path.relative_to(root_dir).parts
     except ValueError:
-        return None
+        return []
 
     chara_dir_name = character_xml_path.parent.name
     if not chara_dir_name.startswith("chara"):
-        return None
+        return []
     suffix = chara_dir_name[len("chara") :]
     if not suffix:
-        return None
+        return []
 
     lower_parts = tuple(part.casefold() for part in relative_parts)
+    candidate_roots: list[Path] = []
     if len(relative_parts) >= 4 and lower_parts[0] == "option":
         pack_root = root_dir / relative_parts[0] / relative_parts[1]
+        candidate_roots.append(pack_root)
+        if lower_parts[1] == "azen":
+            candidate_roots.append(root_dir / "data" / "a000")
     elif len(relative_parts) >= 5 and lower_parts[0] == "bin" and lower_parts[1] == "option":
         pack_root = root_dir / relative_parts[0] / relative_parts[1] / relative_parts[2]
+        candidate_roots.append(pack_root)
+        if lower_parts[2] == "azen":
+            candidate_roots.append(root_dir / "data" / "a000")
     else:
-        return None
+        return []
 
-    manifest_path = (pack_root / "ddsImage" / f"ddsImage{suffix}" / "DDSImage.xml").resolve()
-    if not is_under_root(manifest_path, root_dir):
-        return None
-    return manifest_path
+    manifest_paths: list[Path] = []
+    for candidate_root in candidate_roots:
+        manifest_path = (candidate_root / "ddsImage" / f"ddsImage{suffix}" / "DDSImage.xml").resolve()
+        if not is_under_root(manifest_path, root_dir):
+            continue
+        manifest_paths.append(manifest_path)
+    return manifest_paths
 
 
 def safe_game_path(root_dir: Path, relative_path: str) -> Path:

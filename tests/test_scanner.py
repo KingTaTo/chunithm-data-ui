@@ -301,6 +301,141 @@ class ScannerCharacterTests(unittest.TestCase):
             self.assertIsNone(find_character_image_path(catalog, catalog.characters[0]["source"]))
             self.assertIsNone(find_character_image_path(catalog, catalog.characters[1]["source"]))
 
+    def test_parse_character_uses_data_a000_manifest_for_azen_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "Option" / "AZEN" / "chara" / "chara000000" / "Chara.xml"
+            manifest_path = game_root / "data" / "a000" / "ddsImage" / "ddsImage000000" / "DDSImage.xml"
+            image_path = manifest_path.parent / "CHU_UI_Character_0000_00_00.dds"
+            xml_path.parent.mkdir(parents=True)
+            manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>0</id><str>Chuni Penguin</str></name>
+                <defaultImages><str>chara0000_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara0000_00</str></name>
+                <ddsFile0><path>CHU_UI_Character_0000_00_00.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+
+            item = parse_character(xml_path, game_root)
+
+            self.assertEqual(
+                item["imageUrl"],
+                "/api/character-image?source=Option/AZEN/chara/chara000000/Chara.xml",
+            )
+            self.assertEqual(
+                item["imageThumbUrl"],
+                "/api/character-image?source=Option/AZEN/chara/chara000000/Chara.xml&variant=thumb",
+            )
+
+    def test_find_character_image_path_uses_data_a000_manifest_for_azen_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "bin" / "option" / "AZEN" / "chara" / "chara000000" / "Chara.xml"
+            manifest_path = game_root / "data" / "a000" / "ddsImage" / "ddsImage000000" / "DDSImage.xml"
+            image_path = manifest_path.parent / "CHU_UI_Character_0000_00_00.dds"
+            xml_path.parent.mkdir(parents=True)
+            manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>0</id><str>Chuni Penguin</str></name>
+                <defaultImages><str>chara0000_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara0000_00</str></name>
+                <ddsFile0><path>CHU_UI_Character_0000_00_00.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+            item = parse_character(xml_path, game_root)
+            catalog = Catalog(game_root=game_root, generated_at=0.0, characters=[item])
+
+            resolved = find_character_image_path(catalog, item["source"])
+
+            self.assertEqual(resolved, image_path.resolve())
+
+    def test_parse_character_does_not_use_data_a000_manifest_for_non_azen_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "Option" / "A133" / "chara" / "chara000000" / "Chara.xml"
+            manifest_path = game_root / "data" / "a000" / "ddsImage" / "ddsImage000000" / "DDSImage.xml"
+            image_path = manifest_path.parent / "CHU_UI_Character_0000_00_00.dds"
+            xml_path.parent.mkdir(parents=True)
+            manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>0</id><str>Wrong Pack</str></name>
+                <defaultImages><str>chara0000_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara0000_00</str></name>
+                <ddsFile0><path>CHU_UI_Character_0000_00_00.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+
+            item = parse_character(xml_path, game_root)
+
+            self.assertEqual(item["imageUrl"], "")
+            self.assertEqual(item["imageThumbUrl"], "")
+
+    def test_find_character_image_path_prefers_pack_local_manifest_for_azen_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "Option" / "AZEN" / "chara" / "chara000000" / "Chara.xml"
+            local_manifest_path = game_root / "Option" / "AZEN" / "ddsImage" / "ddsImage000000" / "DDSImage.xml"
+            local_image_path = local_manifest_path.parent / "local.dds"
+            fallback_manifest_path = game_root / "data" / "a000" / "ddsImage" / "ddsImage000000" / "DDSImage.xml"
+            fallback_image_path = fallback_manifest_path.parent / "fallback.dds"
+            xml_path.parent.mkdir(parents=True)
+            local_manifest_path.parent.mkdir(parents=True)
+            fallback_manifest_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>0</id><str>Chuni Penguin</str></name>
+                <defaultImages><str>chara0000_00</str></defaultImages>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            local_manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara0000_00</str></name>
+                <ddsFile0><path>local.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            fallback_manifest_path.write_text(
+                """<DDSImageData>
+                <name><str>chara0000_00</str></name>
+                <ddsFile0><path>fallback.dds</path></ddsFile0>
+                </DDSImageData>""",
+                encoding="utf-8",
+            )
+            local_image_path.write_bytes(b"local")
+            fallback_image_path.write_bytes(b"fallback")
+            item = parse_character(xml_path, game_root)
+            catalog = Catalog(game_root=game_root, generated_at=0.0, characters=[item])
+
+            resolved = find_character_image_path(catalog, item["source"])
+
+            self.assertEqual(resolved, local_image_path.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()
