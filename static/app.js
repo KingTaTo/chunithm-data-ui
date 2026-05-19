@@ -1,7 +1,8 @@
-﻿const state = {
+const state = {
   category: "music",
   query: "",
   summary: null,
+  modalImageUrl: "",
 };
 
 // Column definitions stay paired with the backend category names.
@@ -57,6 +58,12 @@ function renderHead() {
   el("table-head").innerHTML = `<tr>${currentColumns().map((name) => `<th>${name}</th>`).join("")}</tr>`;
 }
 
+function setCategoryView(category) {
+  const showCharacters = category === "characters";
+  el("table-shell").classList.toggle("hidden", showCharacters);
+  el("character-grid").classList.toggle("hidden", !showCharacters);
+}
+
 // Render only the current page of API results to keep large catalogs responsive.
 function renderResultCount(total, shown) {
   const label = categoryLabel().toLowerCase();
@@ -67,6 +74,10 @@ function renderResultCount(total, shown) {
 
 function renderTableMessage(message) {
   el("table-body").innerHTML = `<tr><td colspan="${currentColumns().length}" class="muted">${escapeHtml(message)}</td></tr>`;
+}
+
+function renderGridMessage(message) {
+  el("character-grid").innerHTML = `<div class="grid-message muted">${escapeHtml(message)}</div>`;
 }
 
 function renderRows(items) {
@@ -123,18 +134,81 @@ function renderRow(item) {
   return "";
 }
 
+function renderCharacterCard(item) {
+  const name = item.name || item.dataName || "Unknown character";
+  const thumb = item.imageUrl ? `
+    <button class="character-thumb-button" type="button" data-image-url="${escapeHtml(item.imageUrl)}" data-image-name="${escapeHtml(name)}">
+      <img class="character-thumb" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">
+    </button>
+  ` : `
+    <div class="character-thumb-placeholder">No image</div>
+  `;
+
+  return `<article class="character-card">
+    <div class="character-thumb-wrap">${thumb}</div>
+    <div class="character-card-body">
+      <h2>${escapeHtml(name)}</h2>
+      <dl class="character-meta">
+        <div><dt>ID</dt><dd>${escapeHtml(item.id)}</dd></div>
+        <div><dt>Works</dt><dd>${escapeHtml(item.works || "Unknown")}</dd></div>
+        <div><dt>Image Key</dt><dd>${escapeHtml(item.imageKey || "None")}</dd></div>
+      </dl>
+    </div>
+  </article>`;
+}
+
+function renderCharacterGrid(items) {
+  if (!items.length) {
+    renderGridMessage("No matching entries.");
+    return;
+  }
+  el("character-grid").innerHTML = items.map((item) => renderCharacterCard(item)).join("");
+}
+
+function openImageModal(imageUrl, imageName) {
+  if (!imageUrl) return;
+  state.modalImageUrl = imageUrl;
+  el("image-modal-image").src = imageUrl;
+  el("image-modal-image").alt = imageName;
+  el("image-modal-title").textContent = imageName;
+  el("image-modal").classList.remove("hidden");
+  el("image-modal").setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+}
+
+function closeImageModal() {
+  if (!state.modalImageUrl) return;
+  state.modalImageUrl = "";
+  el("image-modal").classList.add("hidden");
+  el("image-modal").setAttribute("aria-hidden", "true");
+  el("image-modal-image").src = "";
+  el("image-modal-image").alt = "";
+  document.body.classList.remove("modal-open");
+}
+
 let searchTimer = null;
 
 // Each tab asks the backend for its category, preserving the active search text.
 async function loadCategory() {
-  renderHead();
-  renderTableMessage("Loading...");
+  setCategoryView(state.category);
+
+  if (state.category === "characters") {
+    renderGridMessage("Loading...");
+  } else {
+    renderHead();
+    renderTableMessage("Loading...");
+  }
 
   const params = new URLSearchParams({ limit: "400" });
   if (state.query) params.set("q", state.query);
 
   const data = await fetchJson(`/api/${state.category}?${params.toString()}`);
   renderResultCount(data.total, data.items.length);
+
+  if (state.category === "characters") {
+    renderCharacterGrid(data.items);
+    return;
+  }
   renderRows(data.items);
 }
 
@@ -149,6 +223,7 @@ document.querySelectorAll(".tab").forEach((button) => {
     document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("active"));
     button.classList.add("active");
     state.category = button.dataset.category;
+    if (state.category !== "characters") closeImageModal();
     await loadCategory();
   });
 });
@@ -172,8 +247,25 @@ el("rescan").addEventListener("click", async () => {
   }
 });
 
-boot().catch((error) => {
-  el("game-root").textContent = error.message;
-  renderTableMessage(error.message);
+el("character-grid").addEventListener("click", (event) => {
+  const button = event.target.closest(".character-thumb-button");
+  if (!button) return;
+  openImageModal(button.dataset.imageUrl || "", button.dataset.imageName || "Character image preview");
 });
 
+el("image-modal-close").addEventListener("click", closeImageModal);
+el("image-modal-backdrop").addEventListener("click", closeImageModal);
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeImageModal();
+});
+
+boot().catch((error) => {
+  el("game-root").textContent = error.message;
+  setCategoryView(state.category);
+  if (state.category === "characters") {
+    renderGridMessage(error.message);
+    return;
+  }
+  renderTableMessage(error.message);
+});

@@ -32,17 +32,26 @@
     </section>
 
     <section class="content">
-      <div class="table-wrap">
+      <div id="table-shell" class="table-wrap">
         <table>
           <thead id="table-head"></thead>
           <tbody id="table-body"></tbody>
         </table>
       </div>
+      <div id="character-grid" class="character-grid hidden" aria-live="polite"></div>
     </section>
   </main>
+
+  <div id="image-modal" class="modal hidden" aria-hidden="true">
+    <div id="image-modal-backdrop" class="modal-backdrop"></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="image-modal-title">
+      <button id="image-modal-close" class="modal-close" type="button" aria-label="Close image preview">×</button>
+      <p id="image-modal-title" class="modal-title">Character image preview</p>
+      <img id="image-modal-image" class="modal-image" alt="">
+    </div>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
 </html>
-
 
