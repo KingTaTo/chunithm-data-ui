@@ -58,7 +58,7 @@ You can also set `CHUNITHM_GAME_ROOT` before running the server if you do not wa
 - `GET /api/jacket?source=<game-relative-path>` - returns a music jacket image as `image/png`.
 - `GET /api/character-image?source=<game-relative-path>` - returns a character image as `image/png`.
 
-Both image endpoints convert `.dds` files to PNG on demand and cache the PNG bytes in memory. Running `/api/rescan` clears both image caches along with replacing the catalog.
+Both image endpoints convert `.dds` files to PNG on demand and cache the PNG bytes in memory. Running `/api/rescan` clears both image caches along with replacing the catalog, and the Characters UI appends the catalog generation timestamp to character-image requests so browsers fetch refreshed art after a rescan.
 
 ## Notes
 

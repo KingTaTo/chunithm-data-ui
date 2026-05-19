@@ -30,6 +30,14 @@ function escapeHtml(value) {
   }[char]));
 }
 
+function versionedImageUrl(url) {
+  if (!url) return "";
+  const version = state.summary?.generatedAt;
+  if (!version) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${encodeURIComponent(version)}`;
+}
+
 function chartClass(type) {
   return `level-${String(type || "").toLowerCase().replace(/[^a-z]/g, "")}`;
 }
@@ -133,9 +141,10 @@ function modalFocusableElements() {
 
 function renderCharacterCard(item) {
   const name = item.name || item.dataName || "Unknown character";
+  const imageUrl = versionedImageUrl(item.imageUrl);
   const thumb = item.imageUrl ? `
-    <button class="character-thumb-button" type="button" data-image-url="${escapeHtml(item.imageUrl)}" data-image-name="${escapeHtml(name)}">
-      <img class="character-thumb" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">
+    <button class="character-thumb-button" type="button" data-image-url="${escapeHtml(imageUrl)}" data-image-name="${escapeHtml(name)}">
+      <img class="character-thumb" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">
     </button>
   ` : `
     <div class="character-thumb-placeholder">No image</div>
