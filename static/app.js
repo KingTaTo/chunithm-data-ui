@@ -202,6 +202,7 @@ async function loadCategory() {
   setCategoryView(requestCategory);
 
   if (requestCategory === "characters") {
+    closeImageModal();
     renderGridMessage("Loading...");
   } else {
     renderHead();
