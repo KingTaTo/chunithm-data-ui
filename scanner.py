@@ -173,7 +173,10 @@ def find_character_image_path(catalog: Catalog, source: str) -> Path | None:
     if not item or not item.get("image"):
         return None
 
-    source_path = safe_game_path(catalog.game_root, source)
+    try:
+        source_path = safe_game_path(catalog.game_root, source)
+    except ValueError:
+        return None
     image_path = (source_path.parent / item["image"]).resolve()
     if not is_under_root(image_path, catalog.game_root) or not image_path.is_file():
         return None

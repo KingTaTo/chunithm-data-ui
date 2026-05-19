@@ -111,6 +111,26 @@ class ScannerCharacterTests(unittest.TestCase):
                 find_character_image_path(catalog, "data/character/0005/CHU_UI_Character_0005.xml")
             )
 
+    def test_find_character_image_path_returns_none_for_invalid_source_argument(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            game_root = Path(tmpdir)
+            xml_path = game_root / "data" / "character" / "0006" / "CHU_UI_Character_0006.xml"
+            image_path = game_root / "data" / "character" / "0006" / "images" / "portrait.dds"
+            image_path.parent.mkdir(parents=True)
+            xml_path.write_text(
+                """<CharacterData>
+                <name><id>6</id><str>Invalid Source</str></name>
+                <image><path>images/portrait.dds</path></image>
+                </CharacterData>""",
+                encoding="utf-8",
+            )
+            image_path.write_bytes(b"dds")
+            item = parse_character(xml_path, game_root)
+            item["source"] = "../escape.xml"
+            catalog = Catalog(game_root=game_root, generated_at=0.0, characters=[item])
+
+            self.assertIsNone(find_character_image_path(catalog, "../escape.xml"))
+
 
 if __name__ == "__main__":
     unittest.main()
