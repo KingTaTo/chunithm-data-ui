@@ -125,15 +125,19 @@ def parse_music(path: Path, root_dir: Path) -> MusicItem:
 
 def parse_character(path: Path, root_dir: Path) -> dict[str, Any]:
     root = parse_xml(path)
+    image = child_text(root, "image/path") if root is not None else ""
+    source = relpath(path, root_dir)
     return {
         "dataName": child_text(root, "dataName") if root is not None else fallback_field(path, "dataName"),
         "id": child_int(root, "name/id") if root is not None else 0,
         "name": child_text(root, "name/str") if root is not None else path.parent.name,
         "works": child_text(root, "works/str") if root is not None else "",
+        "image": image,
+        "imageUrl": f"/api/character-image?source={quote(source)}" if image else "",
         "imageKey": child_text(root, "defaultImages/str") if root is not None else "",
         "defaultHave": child_bool(root, "defaultHave") if root is not None else False,
         "enabled": not child_bool(root, "disableFlag") if root is not None else True,
-        "source": relpath(path, root_dir),
+        "source": source,
         "pack": pack_name(path, root_dir),
     }
 
@@ -162,6 +166,18 @@ def find_jacket_path(catalog: Catalog, source: str) -> Path | None:
     if not is_under_root(jacket_path, catalog.game_root) or not jacket_path.is_file():
         return None
     return jacket_path
+
+
+def find_character_image_path(catalog: Catalog, source: str) -> Path | None:
+    item = next((entry for entry in catalog.characters if entry.get("source") == source), None)
+    if not item or not item.get("image"):
+        return None
+
+    source_path = safe_game_path(catalog.game_root, source)
+    image_path = (source_path.parent / item["image"]).resolve()
+    if not is_under_root(image_path, catalog.game_root) or not image_path.is_file():
+        return None
+    return image_path
 
 
 def safe_game_path(root_dir: Path, relative_path: str) -> Path:
@@ -282,4 +298,3 @@ def filter_items(items: list[dict[str, Any]], query: dict[str, list[str]]) -> tu
     limit = min(int(query.get("limit", ["250"])[0] or 250), 1000)
     offset = max(int(query.get("offset", ["0"])[0] or 0), 0)
     return result[offset:offset + limit], len(result)
-
