@@ -3,12 +3,13 @@ const state = {
   query: "",
   summary: null,
   modalImageUrl: "",
+  activeRequestToken: 0,
+  lastFocusedElement: null,
 };
 
 // Column definitions stay paired with the backend category names.
 const columns = {
   music: ["Jacket", "ID", "Title", "Artist", "Category", "Charts"],
-  characters: ["ID", "Name", "Works", "Image Key"],
   nameplates: ["ID", "Name", "Image"],
 };
 
@@ -110,15 +111,6 @@ function renderMusicRow(item) {
   </tr>`;
 }
 
-function renderCharacterRow(item) {
-  return `<tr>
-    <td>${escapeHtml(item.id)}</td>
-    <td><strong>${escapeHtml(item.name || item.dataName)}</strong></td>
-    <td>${escapeHtml(item.works)}</td>
-    <td>${escapeHtml(item.imageKey)}</td>
-  </tr>`;
-}
-
 function renderNameplateRow(item) {
   return `<tr>
     <td>${escapeHtml(item.id)}</td>
@@ -129,9 +121,14 @@ function renderNameplateRow(item) {
 
 function renderRow(item) {
   if (state.category === "music") return renderMusicRow(item);
-  if (state.category === "characters") return renderCharacterRow(item);
   if (state.category === "nameplates") return renderNameplateRow(item);
   return "";
+}
+
+function modalFocusableElements() {
+  return Array.from(el("image-modal").querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )).filter((node) => !node.closest(".hidden"));
 }
 
 function renderCharacterCard(item) {
@@ -167,6 +164,7 @@ function renderCharacterGrid(items) {
 
 function openImageModal(imageUrl, imageName) {
   if (!imageUrl) return;
+  state.lastFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   state.modalImageUrl = imageUrl;
   el("image-modal-image").src = imageUrl;
   el("image-modal-image").alt = imageName;
@@ -174,6 +172,8 @@ function openImageModal(imageUrl, imageName) {
   el("image-modal").classList.remove("hidden");
   el("image-modal").setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
+  const focusTarget = modalFocusableElements()[0] || el("image-modal-close");
+  focusTarget.focus();
 }
 
 function closeImageModal() {
@@ -184,15 +184,24 @@ function closeImageModal() {
   el("image-modal-image").src = "";
   el("image-modal-image").alt = "";
   document.body.classList.remove("modal-open");
+  if (state.lastFocusedElement && document.contains(state.lastFocusedElement)) {
+    state.lastFocusedElement.focus();
+  }
+  state.lastFocusedElement = null;
 }
 
 let searchTimer = null;
 
 // Each tab asks the backend for its category, preserving the active search text.
 async function loadCategory() {
-  setCategoryView(state.category);
+  const requestCategory = state.category;
+  const requestQuery = state.query;
+  const requestToken = state.activeRequestToken + 1;
+  state.activeRequestToken = requestToken;
 
-  if (state.category === "characters") {
+  setCategoryView(requestCategory);
+
+  if (requestCategory === "characters") {
     renderGridMessage("Loading...");
   } else {
     renderHead();
@@ -200,12 +209,15 @@ async function loadCategory() {
   }
 
   const params = new URLSearchParams({ limit: "400" });
-  if (state.query) params.set("q", state.query);
+  if (requestQuery) params.set("q", requestQuery);
 
-  const data = await fetchJson(`/api/${state.category}?${params.toString()}`);
+  const data = await fetchJson(`/api/${requestCategory}?${params.toString()}`);
+  if (requestToken !== state.activeRequestToken || requestCategory !== state.category || requestQuery !== state.query) {
+    return;
+  }
   renderResultCount(data.total, data.items.length);
 
-  if (state.category === "characters") {
+  if (requestCategory === "characters") {
     renderCharacterGrid(data.items);
     return;
   }
@@ -257,7 +269,32 @@ el("image-modal-close").addEventListener("click", closeImageModal);
 el("image-modal-backdrop").addEventListener("click", closeImageModal);
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeImageModal();
+  if (!state.modalImageUrl) return;
+  if (event.key === "Escape") {
+    closeImageModal();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusables = modalFocusableElements();
+  if (!focusables.length) {
+    event.preventDefault();
+    el("image-modal-close").focus();
+    return;
+  }
+
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+    return;
+  }
+  if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 
 boot().catch((error) => {
