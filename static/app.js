@@ -211,17 +211,30 @@ async function loadCategory() {
   const params = new URLSearchParams({ limit: "400" });
   if (requestQuery) params.set("q", requestQuery);
 
-  const data = await fetchJson(`/api/${requestCategory}?${params.toString()}`);
-  if (requestToken !== state.activeRequestToken || requestCategory !== state.category || requestQuery !== state.query) {
-    return;
-  }
-  renderResultCount(data.total, data.items.length);
+  try {
+    const data = await fetchJson(`/api/${requestCategory}?${params.toString()}`);
+    if (requestToken !== state.activeRequestToken || requestCategory !== state.category || requestQuery !== state.query) {
+      return;
+    }
+    renderResultCount(data.total, data.items.length);
 
-  if (requestCategory === "characters") {
-    renderCharacterGrid(data.items);
-    return;
+    if (requestCategory === "characters") {
+      renderCharacterGrid(data.items);
+      return;
+    }
+    renderRows(data.items);
+  } catch (error) {
+    if (requestToken !== state.activeRequestToken || requestCategory !== state.category || requestQuery !== state.query) {
+      return;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    el("results-count").textContent = "Unable to load results";
+    if (requestCategory === "characters") {
+      renderGridMessage(message);
+      return;
+    }
+    renderTableMessage(message);
   }
-  renderRows(data.items);
 }
 
 async function boot() {
