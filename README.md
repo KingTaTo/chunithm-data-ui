@@ -25,6 +25,15 @@ python server.py
 
 A folder picker will open. Select the local folder that contains the game files.
 
+```
+chunithm-folder/ <--- Select this
+├── bin/
+├── data/
+├── firm/
+├── license/
+└──  ...
+```
+
 Optional terminal-only usage:
 
 ```powershell
