@@ -25,12 +25,6 @@ python server.py
 
 A folder picker will open. Select the local folder that contains the game files.
 
-Then open:
-
-```text
-http://127.0.0.1:8765
-```
-
 Optional terminal-only usage:
 
 ```powershell
